@@ -1,0 +1,74 @@
+menu "Configuration"
+
+config ETS
+    string "Main topic"
+    default "ETS"
+    help
+        Name of main topic
+
+config ESP32_ID
+    string "ESP32 ID"
+    default "ESPSniffie"
+    help
+        ID of the ESP32, used as the last part of the MQTT topic
+
+config ROOM
+    string "Room"
+    default "1"
+    help
+        Room in which ESP32 is situated
+
+config WIFI_SSID
+    string "WiFi SSID"
+    default "espsniffie"
+    help
+        SSID of WiFi hotspot (network name)
+
+config WIFI_PSW
+    string "WiFi password"
+    default "wifisniffer"
+    help
+        WiFi password (WPA or WPA2)
+
+config BROKER_ADDR
+    string "MQTT broker address"
+    default "mqtt://broker.hivemq.com"
+    help
+        URI of the MQTT broker
+
+config BROKER_PORT
+    int "MQTT broker port"
+    range 1 65535
+    default 1883
+    help
+        Port of the MQTT broker
+
+config CHANNEL
+    int "Sniffing channel"
+    range 1 13
+    default 11
+    help
+        Starting channel (channel hopping is enabled, this is just the first)
+
+config SNIFFING_TIME
+    int "Publish interval in seconds"
+    default 10
+    help
+        How often to publish captured probe requests to MQTT
+
+config FILENAME1
+    string "Log file 1"
+    default "/spiffs/probreq.log"
+
+config FILENAME2
+    string "Log file 2"
+    default "/spiffs/probreq2.log"
+
+config VERBOSE
+    int "Verbose mode"
+    default 0
+    range 0 1
+    help
+        Set to 1 to print extra debug info (MAC, IP, heap size)
+
+endmenu

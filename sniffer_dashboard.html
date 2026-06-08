@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ESP32 WiFi Sniffer Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 20px; }
+
+        h1 { color: #00d4ff; font-size: 24px; margin-bottom: 6px; }
+        .subtitle { color: #888; font-size: 13px; margin-bottom: 20px; }
+
+        .status-bar {
+            display: flex; gap: 20px; margin-bottom: 20px;
+        }
+        .stat-box {
+            background: #1e2130; border-radius: 8px; padding: 14px 20px;
+            border-left: 4px solid #00d4ff; min-width: 140px;
+        }
+        .stat-box .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-box .value { font-size: 26px; font-weight: bold; color: #00d4ff; margin-top: 4px; }
+
+        #conn-status {
+            border-left-color: #ff4444;
+        }
+        #conn-status.connected { border-left-color: #00ff88; }
+        #conn-status .value { color: #ff4444; font-size: 16px; margin-top: 8px; }
+        #conn-status.connected .value { color: #00ff88; }
+
+        table {
+            width: 100%; border-collapse: collapse; background: #1e2130;
+            border-radius: 8px; overflow: hidden;
+        }
+        thead tr { background: #161826; }
+        th { padding: 12px 16px; text-align: left; font-size: 11px;
+             text-transform: uppercase; letter-spacing: 1px; color: #888; }
+        td { padding: 10px 16px; font-size: 13px; border-top: 1px solid #2a2d3e; }
+        tr:hover td { background: #252840; }
+
+        .mac { font-family: monospace; color: #00d4ff; font-size: 13px; }
+        .ssid { color: #ffd700; }
+        .ssid.empty { color: #555; font-style: italic; }
+        .rssi-bar { display: flex; align-items: center; gap: 8px; }
+        .bar-bg { background: #2a2d3e; border-radius: 4px; height: 8px; width: 80px; }
+        .bar-fill { height: 8px; border-radius: 4px; transition: width 0.5s; }
+        .rssi-val { font-family: monospace; font-size: 12px; min-width: 40px; }
+        .time { color: #888; font-size: 12px; }
+        .count { background: #252840; border-radius: 12px; padding: 2px 10px;
+                 font-size: 12px; color: #aaa; }
+
+        .log-box {
+            margin-top: 20px; background: #1e2130; border-radius: 8px;
+            padding: 12px; height: 160px; overflow-y: auto; font-family: monospace;
+            font-size: 12px; color: #888;
+        }
+        .log-box .entry { padding: 2px 0; border-bottom: 1px solid #252840; }
+        .log-box .entry:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+<h1>📡 ESP32 WiFi Sniffer — Live Dashboard</h1>
+<p class="subtitle">broker.hivemq.com → ETS/1/ESPSniffie</p>
+
+<div class="status-bar">
+    <div class="stat-box" id="conn-status">
+        <div class="label">Broker</div>
+        <div class="value" id="conn-text">Connecting...</div>
+    </div>
+    <div class="stat-box">
+        <div class="label">Unique Devices</div>
+        <div class="value" id="device-count">0</div>
+    </div>
+    <div class="stat-box">
+        <div class="label">Total Packets</div>
+        <div class="value" id="packet-count">0</div>
+    </div>
+    <div class="stat-box">
+        <div class="label">Messages</div>
+        <div class="value" id="msg-count">0</div>
+    </div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>MAC Address</th>
+            <th>SSID</th>
+            <th>Signal Strength (RSSI)</th>
+            <th>Est. Distance</th>
+            <th>Last Seen</th>
+            <th>Packets</th>
+        </tr>
+    </thead>
+    <tbody id="device-table"></tbody>
+</table>
+
+<div class="log-box" id="log"></div>
+
+<script>
+    var devices = {};
+    var totalPackets = 0;
+    var totalMessages = 0;
+
+    var client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+        clientId: 'dashboard_' + Math.random().toString(16).substr(2, 8),
+        keepalive: 60
+    });
+
+    client.on('connect', function() {
+        document.getElementById('conn-status').classList.add('connected');
+        document.getElementById('conn-text').textContent = 'Connected';
+        client.subscribe('ETS/1/ESPSniffie');
+        log('Connected to broker.hivemq.com — waiting for ESP32 data...');
+    });
+
+    client.on('error', function(err) {
+        document.getElementById('conn-text').textContent = 'Error';
+        log('Connection error: ' + err.message);
+    });
+
+    client.on('message', function(topic, message) {
+        totalMessages++;
+        document.getElementById('msg-count').textContent = totalMessages;
+        var text = message.toString();
+        parseMessage(text);
+    });
+
+    function parseMessage(text) {
+        var lines = text.split('\n');
+        var parsed = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line || line.match(/^[FT]\s+\d+/)) continue;
+
+            // Match: MAC  SSID  TIMESTAMP  HASH  RSSI  SN  [HTCAP]
+            var m = line.match(/^([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})\s+(.*?)\s+(\d{9,10})\s+([0-9a-f]{32})\s+(-\d+)\s+(\d+)(?:\s+(\S+))?$/i);
+            if (!m) continue;
+
+            var mac       = m[1];
+            var ssid      = m[2].trim();
+            var timestamp = parseInt(m[3]);
+            var rssi      = parseInt(m[5]);
+
+            if (!devices[mac]) {
+                devices[mac] = { ssid: ssid, rssi: rssi, lastSeen: timestamp, count: 0 };
+            }
+            devices[mac].rssi = rssi;
+            devices[mac].lastSeen = timestamp;
+            devices[mac].count++;
+            if (ssid && !devices[mac].ssid) devices[mac].ssid = ssid;
+            if (ssid) devices[mac].ssid = ssid;
+
+            totalPackets++;
+            parsed++;
+        }
+        if (parsed > 0) {
+            document.getElementById('packet-count').textContent = totalPackets;
+            log('Received ' + parsed + ' probe records');
+            renderTable();
+        }
+    }
+
+    function rssiToDistance(rssi) {
+        // Path loss model: d = 10 ^ ((txPower - rssi) / (10 * n))
+        // txPower = -59 dBm (typical RSSI at 1 meter), n = 2.5 (indoor environment)
+        var txPower = -59;
+        var n = 2.5;
+        var d = Math.pow(10, (txPower - rssi) / (10 * n));
+        if (d < 1)   return '< 1 m';
+        if (d < 10)  return d.toFixed(1) + ' m';
+        if (d < 100) return d.toFixed(0) + ' m';
+        return '> 100 m';
+    }
+
+    function rssiColor(rssi) {
+        if (rssi >= -60) return '#00ff88';
+        if (rssi >= -75) return '#ffd700';
+        if (rssi >= -85) return '#ff9500';
+        return '#ff4444';
+    }
+
+    function rssiWidth(rssi) {
+        // -30 = strongest, -100 = weakest
+        var pct = Math.max(0, Math.min(100, (rssi + 100) / 70 * 100));
+        return pct.toFixed(0) + '%';
+    }
+
+    function timeAgo(ts) {
+        var now = Math.floor(Date.now() / 1000);
+        var diff = now - ts;
+        if (diff < 5)   return 'just now';
+        if (diff < 60)  return diff + 's ago';
+        if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+        return Math.floor(diff/3600) + 'h ago';
+    }
+
+    function renderTable() {
+        var sorted = Object.keys(devices).sort(function(a, b) {
+            return devices[b].rssi - devices[a].rssi;
+        });
+
+        document.getElementById('device-count').textContent = sorted.length;
+
+        var html = '';
+        for (var i = 0; i < sorted.length; i++) {
+            var mac = sorted[i];
+            var d = devices[mac];
+            var color = rssiColor(d.rssi);
+            var width = rssiWidth(d.rssi);
+            var ssidHtml = d.ssid
+                ? '<span class="ssid">' + d.ssid + '</span>'
+                : '<span class="ssid empty">wildcard probe</span>';
+
+            html += '<tr>' +
+                '<td><span class="mac">' + mac + '</span></td>' +
+                '<td>' + ssidHtml + '</td>' +
+                '<td><div class="rssi-bar">' +
+                    '<div class="bar-bg"><div class="bar-fill" style="width:' + width + ';background:' + color + '"></div></div>' +
+                    '<span class="rssi-val" style="color:' + color + '">' + d.rssi + ' dBm</span>' +
+                '</div></td>' +
+                '<td><span class="distance" style="color:' + color + ';font-family:monospace">' + rssiToDistance(d.rssi) + '</span></td>' +
+                '<td><span class="time">' + timeAgo(d.lastSeen) + '</span></td>' +
+                '<td><span class="count">' + d.count + '</span></td>' +
+            '</tr>';
+        }
+        document.getElementById('device-table').innerHTML = html;
+    }
+
+    function log(msg) {
+        var box = document.getElementById('log');
+        var d = new Date();
+        var t = d.getHours().toString().padStart(2,'0') + ':' +
+                d.getMinutes().toString().padStart(2,'0') + ':' +
+                d.getSeconds().toString().padStart(2,'0');
+        box.innerHTML = '<div class="entry">[' + t + '] ' + msg + '</div>' + box.innerHTML;
+    }
+
+    // Refresh timestamps every 10s
+    setInterval(function() {
+        if (Object.keys(devices).length > 0) renderTable();
+    }, 10000);
+</script>
+</body>
+</html>

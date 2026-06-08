@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ESP32 WiFi Sniffer — Setup Guide</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 40px; max-width: 860px; margin: 0 auto; }
+  h1 { color: #00d4ff; font-size: 28px; margin-bottom: 6px; }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 36px; }
+  h2 { color: #00d4ff; font-size: 17px; margin: 32px 0 12px 0; padding-left: 12px; border-left: 3px solid #00d4ff; }
+  h3 { color: #ffd700; font-size: 14px; margin: 18px 0 8px 0; }
+  p { color: #ccc; font-size: 14px; line-height: 1.7; margin-bottom: 10px; }
+  ul, ol { padding-left: 22px; margin-bottom: 10px; }
+  li { color: #ccc; font-size: 14px; line-height: 1.9; }
+  code { background: #1e2130; color: #00d4ff; padding: 2px 7px; border-radius: 4px; font-family: monospace; font-size: 13px; }
+  .step { background: #1e2130; border-radius: 10px; padding: 18px 22px; margin-bottom: 14px; border-left: 4px solid #00d4ff; }
+  .step .num { color: #00d4ff; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .warn { background: #2a1f00; border-left: 4px solid #ffd700; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .warn p { color: #ffd700; margin: 0; }
+  .ok { background: #002a15; border-left: 4px solid #00ff88; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .ok p { color: #00ff88; margin: 0; }
+  table { width: 100%; border-collapse: collapse; background: #1e2130; border-radius: 8px; overflow: hidden; margin: 12px 0; }
+  th { background: #161826; padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+  td { padding: 10px 14px; font-size: 13px; border-top: 1px solid #2a2d3e; color: #ccc; }
+  .tag { display: inline-block; background: #252840; border-radius: 12px; padding: 2px 10px; font-size: 12px; color: #aaa; margin: 2px; }
+  hr { border: none; border-top: 1px solid #2a2d3e; margin: 30px 0; }
+  .folder { font-family: monospace; color: #00d4ff; font-size: 13px; }
+  pre { background: #1e2130; border-radius: 8px; padding: 14px 18px; font-size: 13px; color: #ccc; margin: 10px 0; overflow-x: auto; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>📡 ESP32 WiFi Sniffer</h1>
+<p class="subtitle">Setup Guide — Fontys ICT Group 1 | Daan, Mark &amp; Mike</p>
+
+<hr>
+
+<h2>What This Does</h2>
+<p>The ESP32 runs in promiscuous WiFi mode, capturing <strong>probe requests</strong> sent by phones and laptops nearby. Every device that has WiFi on broadcasts these requests to find known networks. The ESP32 logs them and publishes to an MQTT broker, which the live dashboard reads in real time.</p>
+
+<table>
+  <tr><th>What you see</th><th>What it means</th></tr>
+  <tr><td>MAC address</td><td>Unique hardware ID of the device (often randomised on modern phones)</td></tr>
+  <tr><td>SSID</td><td>Network name the device is looking for (<em>wildcard probe</em> = any network)</td></tr>
+  <tr><td>RSSI</td><td>Signal strength in dBm — stronger = closer</td></tr>
+  <tr><td>Est. Distance</td><td>Rough distance estimate using path-loss formula (indoor, ±50% accuracy)</td></tr>
+</table>
+
+<hr>
+
+<h2>What You Need</h2>
+
+<h3>Hardware</h3>
+<ul>
+  <li>ESP32-WROOM-32 development board</li>
+  <li>USB data cable (not a charge-only cable)</li>
+  <li>A phone or laptop to share a hotspot</li>
+</ul>
+
+<h3>Software (one-time install)</h3>
+<ul>
+  <li><strong>VS Code</strong> — <a href="https://code.visualstudio.com" style="color:#00d4ff">code.visualstudio.com</a></li>
+  <li><strong>PlatformIO extension</strong> — install from VS Code Extensions (search <em>PlatformIO IDE</em>)</li>
+</ul>
+
+<div class="ok"><p>✅ No MSYS2, no Python, no manual drivers needed. PlatformIO handles everything automatically.</p></div>
+
+<hr>
+
+<h2>First-Time Setup</h2>
+
+<div class="step">
+  <div class="num">Step 1 — Create the hotspot</div>
+  <p>The ESP32 is hardcoded to connect to this hotspot:</p>
+  <table>
+    <tr><th>Setting</th><th>Value</th></tr>
+    <tr><td>Network name (SSID)</td><td><code>espsniffie</code></td></tr>
+    <tr><td>Password</td><td><code>wifisniffer</code></td></tr>
+    <tr><td>Band</td><td>2.4 GHz (not 5 GHz)</td></tr>
+  </table>
+  <p style="margin-top:10px">On <strong>Android</strong>: Settings → Network → Hotspot. On <strong>iPhone</strong>: Settings → Personal Hotspot. Change the name and password to match exactly.</p>
+</div>
+
+<div class="step">
+  <div class="num">Step 2 — Open the project in VS Code</div>
+  <p>Open VS Code → <strong>File → Open Folder</strong> → select the <span class="folder">esp32-sniffer</span> folder (inside this ZIP).</p>
+  <div class="warn"><p>⚠️ The project path must not contain spaces. Place the folder at <code>C:\PlatformIO\esp32-sniffer\</code> or similar.</p></div>
+</div>
+
+<div class="step">
+  <div class="num">Step 3 — First build (downloads toolchain)</div>
+  <p>Press <code>Ctrl+Alt+B</code> or click the <strong>✓ checkmark</strong> in the bottom toolbar.</p>
+  <p>The <strong>first build takes 3–10 minutes</strong> — PlatformIO downloads the ESP32 compiler and ESP-IDF automatically. Subsequent builds take about 10 seconds.</p>
+  <div class="ok"><p>✅ You will see <strong>[SUCCESS]</strong> at the end of the output when it's done.</p></div>
+</div>
+
+<div class="step">
+  <div class="num">Step 4 — Flash to ESP32</div>
+  <ol>
+    <li>Plug the ESP32 into USB</li>
+    <li>Click the <strong>→ arrow</strong> in the bottom PlatformIO toolbar (or <code>Ctrl+Alt+U</code>)</li>
+    <li>Wait for <strong>[SUCCESS]</strong> — the ESP32 resets automatically</li>
+  </ol>
+  <div class="warn"><p>⚠️ If flashing gets stuck on <code>Connecting....</code> — hold the <strong>BOOT</strong> button on the ESP32 until you see <code>Uploading stub...</code>, then release.</p></div>
+</div>
+
+<div class="step">
+  <div class="num">Step 5 — Open the dashboard</div>
+  <p>Open <span class="folder">sniffer_dashboard.html</span> in any browser. It connects to the MQTT broker automatically and starts showing devices within a few seconds.</p>
+</div>
+
+<hr>
+
+<h2>Daily Use</h2>
+<p>Once flashed, you only need to:</p>
+<ol>
+  <li>Turn on the <code>espsniffie</code> hotspot on your phone</li>
+  <li>Plug in the ESP32</li>
+  <li>Open <span class="folder">sniffer_dashboard.html</span> in a browser</li>
+</ol>
+<p>No reflashing needed unless you change the code.</p>
+
+<hr>
+
+<h2>Project File Structure</h2>
+<pre>esp32-sniffer/
+├── platformio.ini          ← build settings (COM port, board, flash size)
+├── sdkconfig.defaults      ← firmware config (WiFi credentials, MQTT, intervals)
+├── partitions_spiffs.csv   ← flash partition layout
+├── CMakeLists.txt          ← auto-generated by PlatformIO
+├── src/
+│   ├── main.c              ← main firmware source code
+│   ├── CMakeLists.txt      ← declares IDF component dependencies
+│   └── Kconfig.projbuild   ← CONFIG_ variable definitions
+└── components/
+    ├── md5/                ← MD5 hash library (for packet deduplication)
+    └── esp-mqtt/           ← MQTT client library (from Espressif GitHub)</pre>
+
+<hr>
+
+<h2>Changing Settings</h2>
+<p>Edit <span class="folder">esp32-sniffer/sdkconfig.defaults</span> to change:</p>
+<table>
+  <tr><th>Setting</th><th>Key</th><th>Default</th></tr>
+  <tr><td>WiFi network name</td><td><code>CONFIG_WIFI_SSID</code></td><td><code>espsniffie</code></td></tr>
+  <tr><td>WiFi password</td><td><code>CONFIG_WIFI_PSW</code></td><td><code>wifisniffer</code></td></tr>
+  <tr><td>ESP32 ID (MQTT topic)</td><td><code>CONFIG_ESP32_ID</code></td><td><code>ESPSniffie</code></td></tr>
+  <tr><td>Room number</td><td><code>CONFIG_ROOM</code></td><td><code>1</code></td></tr>
+  <tr><td>Publish interval (seconds)</td><td><code>CONFIG_SNIFFING_TIME</code></td><td><code>10</code></td></tr>
+</table>
+<p>After editing, delete <span class="folder">sdkconfig.esp32dev</span> if it exists, then rebuild and reflash.</p>
+
+<hr>
+
+<h2>Troubleshooting</h2>
+<table>
+  <tr><th>Problem</th><th>Fix</th></tr>
+  <tr><td>Flash stuck on <code>Connecting....</code></td><td>Hold BOOT button on ESP32 until upload starts</td></tr>
+  <tr><td>Wrong COM port</td><td>Edit <code>upload_port = COM5</code> in <code>platformio.ini</code> to match your port (check Device Manager)</td></tr>
+  <tr><td>Build error: whitespace in path</td><td>Move the project to <code>C:\PlatformIO\esp32-sniffer\</code> — no spaces allowed in path</td></tr>
+  <tr><td>Dashboard shows "Connecting..."</td><td>Open in a browser directly (not via Live Server). Must use <code>wss://</code> broker.</td></tr>
+  <tr><td>ESP32 not connecting to hotspot</td><td>Check SSID is exactly <code>espsniffie</code>, password <code>wifisniffer</code>, and hotspot is 2.4 GHz</td></tr>
+  <tr><td>No devices showing on dashboard</td><td>Wait 10–15 seconds after ESP32 boots — first publish takes one interval</td></tr>
+</table>
+
+<hr>
+<p style="color:#555; font-size:12px; text-align:center; margin-top:20px">Fontys ICT — IoT Tracking Project — Group 1</p>
+
+</body>
+</html>
